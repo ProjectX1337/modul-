@@ -1,0 +1,72 @@
+Шаг 2. Импорт данных из Заказчики.json
+Здесь есть нюанс: SQL Server не умеет напрямую импортировать JSON через кнопку как Excel. Есть два пути:
+
+Вариант А (простой) — вставить данные вручную через INSERT
+Поскольку в файле всего 6 записей, самый быстрый способ — просто вставить их запросом. Выполни в SSMS:
+
+sql
+USE MilkPlant;
+GO
+
+INSERT INTO Counterparty (counterparty_id, name, inn, address, phone, is_salesman, is_buyer)
+VALUES
+('000000001', N'ООО "Поставка"',        N'',            N'г.Пятигорск',                       N'+79198634592', 1, 1),
+('000000002', N'ООО "Кинотеатр Квант"', N'26320045123', N'г. Железноводск, ул. Мира, 123',    N'+79884581555', 1, 0),
+('000000008', N'ООО "Новый JDTO"',      N'26320045111', N'г. Железноводсу',                   N'+79884581555', 1, 0),
+('000000003', N'ООО "Ромашка"',         N'4140784214',  N'г. Омск, ул. Строителей, 294',      N'+79882584546', 0, 1),
+('000000009', N'ООО "Ипподром"',        N'5874045632',  N'г. Уфа, ул. Набережная,  37',       N'+79627486389', 1, 1),
+('000000010', N'ООО "Ассоль"',          N'2629011278',  N'г. Калуга, ул. Пушкина, 94',        N'+79184572398', 0, 1);
+GO
+Проверь результат:
+
+sql
+SELECT * FROM Counterparty;
+Должно вернуться 6 строк. ✅
+
+Вариант Б (правильный, «по-взрослому») — через OPENJSON
+Этот способ использует встроенную функцию SQL Server для работы с JSON. Работает только на SQL Server 2016 и новее.
+
+Сохрани файл Заказчики.json на диск, например: C:\Data\Заказчики.json
+
+Выполни:
+
+sql
+USE MilkPlant;
+GO
+
+-- Включаем доступ к файлам на диске
+EXEC sp_configure 'show advanced options', 1;
+RECONFIGURE;
+EXEC sp_configure 'Ad Hoc Distributed Queries', 1;
+RECONFIGURE;
+GO
+
+-- Загружаем JSON из файла
+DECLARE @json NVARCHAR(MAX);
+
+SELECT @json = BulkColumn
+FROM OPENROWSET (BULK 'C:\Data\Заказчики.json', SINGLE_CLOB) AS j;
+
+-- Разбираем JSON и вставляем в таблицу
+INSERT INTO Counterparty (counterparty_id, name, inn, address, phone, is_salesman, is_buyer)
+SELECT 
+    id,
+    name,
+    ISNULL(inn, ''),
+    addres,
+    phone,
+    CAST(salesman AS BIT),
+    CAST(buyer AS BIT)
+FROM OPENJSON(@json)
+WITH (
+    id        CHAR(9)        '$.id',
+    name      NVARCHAR(255)  '$.name',
+    inn       NVARCHAR(12)   '$.inn',
+    addres    NVARCHAR(255)  '$.addres',
+    phone     NVARCHAR(20)   '$.phone',
+    salesman  BIT            '$.salesman',
+    buyer     BIT            '$.buyer'
+);
+
+SELECT * FROM Counterparty;
+GO

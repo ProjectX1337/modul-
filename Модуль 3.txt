@@ -1,0 +1,104 @@
+Шаг 2. Основной запрос — полная стоимость заказа
+Вариант А. Простой (через подзапрос)
+sql
+USE MilkPlant;
+GO
+
+SELECT 
+    o.order_id,
+    o.order_number,
+    o.order_date,
+    SUM(
+        ol.quantity * (
+            SELECT SUM(s.quantity * m.price)
+            FROM Specification s
+            JOIN Material m ON s.material_id = m.material_id
+            WHERE s.product_id = ol.product_id
+        )
+    ) AS FullCost
+FROM [Order] o
+JOIN OrderLine ol ON o.order_id = ol.order_id
+GROUP BY o.order_id, o.order_number, o.order_date;
+Вариант Б. Через CTE (более читаемый, рекомендую на экзамене)
+sql
+USE MilkPlant;
+GO
+
+WITH ProductCost AS (
+    -- Себестоимость единицы каждой продукции
+    SELECT 
+        s.product_id,
+        SUM(s.quantity * m.price) AS UnitCost
+    FROM Specification s
+    JOIN Material m ON s.material_id = m.material_id
+    GROUP BY s.product_id
+)
+SELECT 
+    o.order_id,
+    o.order_number,
+    o.order_date,
+    SUM(ol.quantity * pc.UnitCost) AS FullCost
+FROM [Order] o
+JOIN OrderLine ol ON o.order_id = ol.order_id
+JOIN ProductCost pc ON ol.product_id = pc.product_id
+GROUP BY o.order_id, o.order_number, o.order_date
+ORDER BY o.order_id;
+Ожидаемый результат для заказа № 2:
+
+order_id	order_number	order_date	FullCost
+1	Заказ покупателя № 2	2025-06-06	(рассчитается автоматически)
+📊 Шаг 3. Детализированный запрос (с расшифровкой по строкам)
+Этот вариант удобен, чтобы показать преподавателю всю логику расчета:
+
+sql
+USE MilkPlant;
+GO
+
+SELECT 
+    o.order_number                                  AS НомерЗаказа,
+    o.order_date                                    AS ДатаЗаказа,
+    p.name                                          AS Продукция,
+    ol.quantity                                     AS Количество,
+    p.price                                         AS ЦенаПродажи,
+    ol.quantity * p.price                           AS СуммаПродажи,
+    SUM(s.quantity * m.price)                       AS СебестоимостьЕдиницы,
+    ol.quantity * SUM(s.quantity * m.price)         AS СебестоимостьПозиции
+FROM [Order] o
+JOIN OrderLine ol       ON o.order_id = ol.order_id
+JOIN Product p          ON ol.product_id = p.product_id
+LEFT JOIN Specification s ON p.product_id = s.product_id
+LEFT JOIN Material m    ON s.material_id = m.material_id
+GROUP BY 
+    o.order_number, 
+    o.order_date, 
+    p.name, 
+    ol.quantity, 
+    p.price
+ORDER BY o.order_number, p.name;
+
+Шаг 4. Итоговый запрос — итог по конкретному заказу
+Если нужно посчитать стоимость одного конкретного заказа (например, №2):
+
+sql
+USE MilkPlant;
+GO
+
+DECLARE @OrderId INT = 1;  -- ID нужного заказа
+
+WITH ProductCost AS (
+    SELECT 
+        s.product_id,
+        SUM(s.quantity * m.price) AS UnitCost
+    FROM Specification s
+    JOIN Material m ON s.material_id = m.material_id
+    GROUP BY s.product_id
+)
+SELECT 
+    o.order_number                         AS Заказ,
+    o.order_date                           AS Дата,
+    SUM(ol.quantity * pc.UnitCost)         AS ПолнаяСтоимость
+FROM [Order] o
+JOIN OrderLine ol    ON o.order_id = ol.order_id
+JOIN ProductCost pc  ON ol.product_id = pc.product_id
+WHERE o.order_id = @OrderId
+GROUP BY o.order_number, o.order_date;

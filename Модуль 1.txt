@@ -1,0 +1,96 @@
+CREATE DATABASE MilkPlant;
+GO
+USE MilkPlant;
+GO
+
+-- Единицы измерения
+CREATE TABLE Unit (
+    unit_id INT IDENTITY(1,1) PRIMARY KEY,
+    name NVARCHAR(20) NOT NULL UNIQUE
+);
+
+-- Контрагенты (заказчики и исполнители)
+CREATE TABLE Counterparty (
+    counterparty_id CHAR(9) PRIMARY KEY,
+    name NVARCHAR(255) NOT NULL,
+    inn NVARCHAR(12) NULL,
+    address NVARCHAR(255) NULL,
+    phone NVARCHAR(20) NULL,
+    is_salesman BIT NOT NULL DEFAULT 0,
+    is_buyer BIT NOT NULL DEFAULT 0
+);
+
+-- Продукция
+CREATE TABLE Product (
+    product_id INT IDENTITY(1,1) PRIMARY KEY,
+    code NVARCHAR(20) NOT NULL UNIQUE,
+    name NVARCHAR(255) NOT NULL,
+    unit_id INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    CONSTRAINT FK_Product_Unit FOREIGN KEY (unit_id) REFERENCES Unit(unit_id)
+);
+
+-- Материалы
+CREATE TABLE Material (
+    material_id INT IDENTITY(1,1) PRIMARY KEY,
+    code NVARCHAR(20) NOT NULL UNIQUE,
+    name NVARCHAR(255) NOT NULL,
+    unit_id INT NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    CONSTRAINT FK_Material_Unit FOREIGN KEY (unit_id) REFERENCES Unit(unit_id)
+);
+
+-- Спецификация
+CREATE TABLE Specification (
+    specification_id INT IDENTITY(1,1) PRIMARY KEY,
+    product_id INT NOT NULL,
+    material_id INT NOT NULL,
+    quantity DECIMAL(10,3) NOT NULL,
+    CONSTRAINT FK_Specification_Product FOREIGN KEY (product_id) REFERENCES Product(product_id),
+    CONSTRAINT FK_Specification_Material FOREIGN KEY (material_id) REFERENCES Material(material_id),
+    CONSTRAINT UQ_Specification UNIQUE (product_id, material_id)
+);
+
+-- Заказ покупателя (шапка)
+CREATE TABLE [Order] (
+    order_id INT IDENTITY(1,1) PRIMARY KEY,
+    order_number NVARCHAR(50) NOT NULL,
+    order_date DATE NOT NULL,
+    customer_id CHAR(9) NOT NULL,
+    executor_id CHAR(9) NOT NULL,
+    CONSTRAINT FK_Order_Customer FOREIGN KEY (customer_id) REFERENCES Counterparty(counterparty_id),
+    CONSTRAINT FK_Order_Executor FOREIGN KEY (executor_id) REFERENCES Counterparty(counterparty_id)
+);
+
+-- Строка заказа
+CREATE TABLE OrderLine (
+    order_line_id INT IDENTITY(1,1) PRIMARY KEY,
+    order_id INT NOT NULL,
+    product_id INT NOT NULL,
+    quantity DECIMAL(10,3) NOT NULL,
+    price DECIMAL(10,2) NOT NULL,
+    CONSTRAINT FK_OrderLine_Order FOREIGN KEY (order_id) REFERENCES [Order](order_id),
+    CONSTRAINT FK_OrderLine_Product FOREIGN KEY (product_id) REFERENCES Product(product_id)
+);
+
+-- Производство (шапка)
+CREATE TABLE Production (
+    production_id INT IDENTITY(1,1) PRIMARY KEY,
+    production_number NVARCHAR(50) NOT NULL,
+    production_date DATE NOT NULL,
+    product_id INT NOT NULL,
+    quantity DECIMAL(10,3) NOT NULL,
+    CONSTRAINT FK_Production_Product FOREIGN KEY (product_id) REFERENCES Product(product_id)
+);
+
+-- Материалы производства
+CREATE TABLE ProductionMaterial (
+    production_material_id INT IDENTITY(1,1) PRIMARY KEY,
+    production_id INT NOT NULL,
+    material_id INT NOT NULL,
+    quantity DECIMAL(10,3) NOT NULL,
+    CONSTRAINT FK_ProductionMaterial_Production FOREIGN KEY (production_id) REFERENCES Production(production_id),
+    CONSTRAINT FK_ProductionMaterial_Material FOREIGN KEY (material_id) REFERENCES Material(material_id),
+    CONSTRAINT UQ_ProductionMaterial UNIQUE (production_id, material_id)
+);
+GO
